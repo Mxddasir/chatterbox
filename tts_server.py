@@ -36,7 +36,7 @@ def save_voices_metadata(metadata):
         json.dump(metadata, f, indent=2)
 
 def merge_audio_clips(clips, sample_rate, silence_duration=0.3):
-    """Merge multiple audio clips with silence in between using pydub."""
+    """Merge multiple audio clips with natural pauses and fade effects."""
     try:
         # Convert numpy arrays to AudioSegment objects
         audio_segments = []
@@ -55,15 +55,40 @@ def merge_audio_clips(clips, sample_rate, silence_duration=0.3):
                 sample_width=2,  # 16-bit audio
                 channels=1  # mono
             )
+            
+            # Add fade in/out to each clip (100ms fade)
+            audio_segment = audio_segment.fade_in(100).fade_out(100)
             audio_segments.append(audio_segment)
         
-        # Create silence
-        silence = AudioSegment.silent(duration=int(silence_duration * 1000))  # duration in ms
+        # Create natural pauses with varying durations
+        # Shorter pause for quick responses, longer for more thoughtful ones
+        pause_durations = [
+            int(0.2 * 1000),  # 200ms for quick responses
+            int(0.4 * 1000),  # 400ms for normal pauses
+            int(0.6 * 1000),  # 600ms for longer pauses
+        ]
         
-        # Merge clips with silence
+        # Merge clips with natural pauses
         merged = audio_segments[0]
-        for segment in audio_segments[1:]:
-            merged = merged + silence + segment
+        for i, segment in enumerate(audio_segments[1:], 1):
+            # Choose pause duration based on position
+            if i < len(audio_segments) - 1:
+                pause_duration = pause_durations[i % len(pause_durations)]
+            else:
+                # Longer pause before the last clip
+                pause_duration = int(0.8 * 1000)  # 800ms
+            
+            # Create pause with slight volume variation
+            pause = AudioSegment.silent(duration=pause_duration)
+            # Add slight volume variation to make it more natural
+            pause = pause - 3  # Reduce volume by 3dB
+            
+            # Add crossfade between clips (50ms)
+            merged = merged.append(pause, crossfade=50)
+            merged = merged.append(segment, crossfade=50)
+        
+        # Add a final fade out to the entire conversation
+        merged = merged.fade_out(200)  # 200ms fade out
         
         # Convert back to numpy array
         merged_array = np.array(merged.get_array_of_samples(), dtype=np.float32) / 32767.0
